@@ -1,4 +1,6 @@
 #include <SDL2/SDL.h>
+
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -23,6 +25,34 @@ enum Tiles {
     GOAL,
     EMPTY,
 };
+
+#define INPUT_BUFFER_SIZE 5
+typedef struct InputBuffer
+{
+    int oldest;
+    int len;
+    SDL_Keysym inputs[INPUT_BUFFER_SIZE];
+} InputBuffer;
+InputBuffer input_buf = {0};
+
+void input_buf_queue(SDL_Keysym key)
+{
+    assert(input_buf.len < INPUT_BUFFER_SIZE);
+
+    int index = (input_buf.oldest + input_buf.len) % INPUT_BUFFER_SIZE;
+    input_buf.inputs[index] = key;
+    input_buf.len++;
+}
+
+SDL_Keysym input_buf_dequeue()
+{
+    assert(input_buf.len);
+
+    SDL_Keysym key = input_buf.inputs[input_buf.oldest];
+    input_buf.oldest = (input_buf.oldest + 1) % INPUT_BUFFER_SIZE;
+    input_buf.len--;
+    return key;
+}
 
 typedef struct Snake
 {
@@ -207,6 +237,10 @@ void handle_keypress(SDL_Keysym key)
 
 void tick()
 {
+    if (input_buf.len) {
+        handle_keypress(input_buf_dequeue());
+    }
+
     for (size_t y = 0; y < GRID_HEIGHT; ++y) {
         for (size_t x = 0; x < GRID_WIDTH; ++x) {
             if (grid[y][x] > EMPTY) {
@@ -269,16 +303,12 @@ int main()
     int has_quit = 0;
     while (1) {
         while (!has_quit && SDL_PollEvent(&event)) {
-            // FIXME: If two events get queued up back to back this can
-            // mess with later logic: when going left if you can press
-            // up/down and then right quickly enough you'll change
-            // to going right and then instantly die
             switch (event.type) {
             case SDL_QUIT:
                 has_quit = 1;
                 break;
             case SDL_KEYDOWN:
-                handle_keypress(event.key.keysym);
+                input_buf_queue(event.key.keysym);
                 break;
             }
         }
